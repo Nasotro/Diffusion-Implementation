@@ -2,4 +2,6 @@ data/cifar-10-batches-py/
 
 venv/
 
-models/__pycache__/
+__pycache__/
+
+*/__pycache__/

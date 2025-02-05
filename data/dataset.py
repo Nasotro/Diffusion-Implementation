@@ -1,7 +1,6 @@
 import torch
 import torchvision
 import torchvision.transforms as transforms
-from torch.utils.data import DataLoader
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -44,3 +43,5 @@ class CIFAR10_Dataset():
         return f"CIFAR dataset of size {len(self)}"
     def __repr__(self) -> str:
         return str(self)
+
+
