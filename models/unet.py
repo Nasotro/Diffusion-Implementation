@@ -70,14 +70,29 @@ class FinalBlock(nn.Module):
         x = self.relu(self.final_conv(x))
         return x
 
-class Unet(nn.Module):
-    def __init__(self, first_hidden:int = 16, depth:int = 3):
+class SinusoidalPositionEmbeddings(nn.Module):
+    def __init__(self, dim):
         super().__init__()
+        self.dim = dim
+
+    def forward(self, time):
+        device = time.device
+        half_dim = self.dim // 2
+        embeddings = torch.log(torch.tensor(10000.0, device=device)) / (half_dim - 1)
+        embeddings = torch.exp(torch.arange(half_dim, device=device) * -embeddings)
+        embeddings = time[:, None] * embeddings[None, :]
+        embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
+        return embeddings
+
+class Unet(nn.Module):
+    def __init__(self, first_hidden:int = 16, depth:int = 3, time_embed_dim:int=8):
+        super().__init__()
+        self.time_emb = SinusoidalPositionEmbeddings(time_embed_dim)
         d = depth - 1
         self.down_blocks = nn.ModuleList()
         self.up_blocks = nn.ModuleList()
         
-        self.down_blocks.append(DownBlock(3, first_hidden))
+        self.down_blocks.append(DownBlock(3 + time_embed_dim, first_hidden))
         for i in range(d):
             self.down_blocks.append(DownBlock(first_hidden * 2**i, first_hidden * 2**(i+1)))
         
@@ -89,21 +104,30 @@ class Unet(nn.Module):
         self.final = FinalBlock(first_hidden, 3)
         
 
-    def forward(self, x):
-        links = []
+    def forward(self, x, time):
+        time_embeddings = self.time_emb(time)
+        time_embeddings = time_embeddings.unsqueeze(2).unsqueeze(3)
+        time_embeddings = time_embeddings.expand(x.size(0), time_embeddings.size(1), x.size(2), x.size(3))
+    
+        print(f'start with shape {x.shape}')
+        
+        x = torch.cat([x, time_embeddings], dim=1)
+        print(f'after concatenating the timestep embedds : {x.shape}')
+        
+        skips = []
         for i, block in enumerate(self.down_blocks):
             print(f'down block {i}, with shape {x.shape}')
             x, xi = block(x)
-            links.append(xi)
+            skips.append(xi)
         
         x = self.bottleneck(x)
         print(f'after bottleneck : shape = {x.shape}')
         
         for i, block in enumerate(self.up_blocks):
             print(f'up block {i}, with shape {x.shape}')
-            x = block(x, links.pop())
+            x = block(x, skips.pop())
         
-        x = self.final(x, links[0])
+        x = self.final(x, skips[0])
         print(f'after final : shape = {x.shape}')
         
         return x
