@@ -5,8 +5,8 @@ import numpy as np
 
 def show_image(img:torch.Tensor, title:str=None):
     img = img / 2 + 0.5     # unnormalize
-    npimg = img.numpy()
-    plt.imshow(np.transpose(npimg, (1, 2, 0)))
+    npimg = img.cpu().detach().numpy()
+    plt.imshow(np.transpose(npimg, (1, 2, 0)), cmap='gray')
     if title is not None:
         plt.title(title)
     plt.show()

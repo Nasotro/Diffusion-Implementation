@@ -76,12 +76,23 @@ class CosineNoiseAdder():
     def __init__(self, T:int=2000, s=0.008):
         self.T = torch.tensor(T)
         self.s = torch.tensor(s) # The value of s is selected such that sqrt(B_0) is slightly smaller than the pixel bin size 1/127.5, which gives s = 0.008. 
-        
+        self.f = lambda x: torch.cos(((x/self.T) + self.s)/(1+self.s) * torch.pi/2)**2
+
     def image_at_time_step(self, img:torch.Tensor, t):
         if t>=self.T:
             raise(ValueError(f"The value should be lower than {self.T}"))
-        f = lambda x: torch.cos(((x/self.T) + self.s)/(1+self.s) * torch.pi/2)**2
-        alpha_t_barre = f(t)/f(0)
+        alpha_t_barre = self.get_alpha_t_barre(t)
         noise = torch.randn_like(img)
         noisy_image = torch.sqrt(alpha_t_barre) * img + torch.sqrt(1 - alpha_t_barre) * noise
         return noisy_image, noise
+    
+    def get_alpha_t_barre(self, t:int):
+        return self.f(t)
+    
+    def get_alpha_t(self, t:int):
+        return self.f(t)/self.f(t-1)
+    
+    def get_beta_t(self, t:int):
+        return 1 - self.get_alpha_t(t)
+        
+        

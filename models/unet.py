@@ -7,13 +7,14 @@ class DownBlock(nn.Module):
         self.relu = nn.ReLU()
         self.convs = nn.ModuleList()
         self.convs.append(nn.Conv2d(input_channels, output_channels, kernel_size, padding=1))
+        self.norms = nn.ModuleList([nn.BatchNorm2d(output_channels) for _ in range(conv_layers)])
         for _ in range(conv_layers - 1):
             self.convs.append(nn.Conv2d(output_channels, output_channels, kernel_size, padding=1))
         self.max_pooling = nn.MaxPool2d(kernel_size=1, stride=2)
 
     def forward(self, x):
-        for conv in self.convs:
-            x = self.relu(conv(x))
+        for conv, norm in zip(self.convs, self.norms):
+            x = self.relu(norm(conv(x)))
         x_link = x.clone()
         x = self.max_pooling(x_link)
         return x, x_link
@@ -23,14 +24,15 @@ class BottleNeck(nn.Module):
         super().__init__()
         self.convs = nn.ModuleList()
         self.convs.append(nn.Conv2d(input_channels, hidden_channels, kernel_size, padding=1))
+        self.norms = nn.ModuleList([nn.BatchNorm2d(hidden_channels) for _ in range(conv_layers)])
         for _ in range(conv_layers - 1):
             self.convs.append(nn.Conv2d(hidden_channels, hidden_channels, kernel_size, padding=1))
         self.up_conv = nn.ConvTranspose2d(hidden_channels, hidden_channels // 2, kernel_size=2, stride=2)
         self.relu = nn.ReLU()
         
     def forward(self, x):
-        for conv in self.convs:
-            x = self.relu(conv(x))
+        for conv, norm in zip(self.convs, self.norms):
+            x = self.relu(norm(conv(x)))
         x = self.relu(self.up_conv(x))
         return x
 
@@ -40,14 +42,15 @@ class UpBlock(nn.Module):
         self.relu = nn.ReLU()
         self.convs = nn.ModuleList()
         self.convs.append(nn.Conv2d(input_channels * 2, input_channels, kernel_size, padding=1))
+        self.norms = nn.ModuleList([nn.BatchNorm2d(input_channels) for _ in range(conv_layers)])
         for _ in range(conv_layers - 1):
             self.convs.append(nn.Conv2d(input_channels, input_channels, kernel_size, padding=1))
         self.up_conv = nn.ConvTranspose2d(input_channels, input_channels // 2, kernel_size=2, stride=2)
 
     def forward(self, x:torch.Tensor, x_connection:torch.Tensor):
         x = torch.cat([x, x_connection], dim=1)
-        for conv in self.convs:
-            x = self.relu(conv(x))
+        for conv, norm in zip(self.convs, self.norms):
+            x = self.relu(norm(conv(x)))
         x = self.relu(self.up_conv(x))
         return x
 
@@ -55,8 +58,10 @@ class FinalBlock(nn.Module):
     def __init__(self, input_channels, conv_layers:int=2, output_channels:int=3):
         super().__init__()
         self.relu = nn.ReLU()
+        self.tanh = nn.Tanh()
         self.convs = nn.ModuleList()
         self.convs.append(nn.Conv2d(input_channels * 2, input_channels, kernel_size=3, padding=1))  
+        self.norms = nn.ModuleList([nn.BatchNorm2d(input_channels) for _ in range(conv_layers)])
         for _ in range(conv_layers - 1):
             self.convs.append(nn.Conv2d(input_channels, input_channels, kernel_size=3, padding=1))
         self.final_conv = nn.Conv2d(input_channels, output_channels, kernel_size=3, padding=1)
@@ -64,10 +69,10 @@ class FinalBlock(nn.Module):
     def forward(self, x:torch.Tensor, x_connection:torch.Tensor):
         x = torch.cat([x, x_connection], dim=1)
         
-        for conv in self.convs:
-            x = self.relu(conv(x))
+        for conv, norm in zip(self.convs, self.norms):
+            x = self.relu(norm(conv(x)))
         
-        x = self.relu(self.final_conv(x))
+        x = self.tanh(self.final_conv(x))
         return x
 
 class SinusoidalPositionEmbeddings(nn.Module):
@@ -85,14 +90,15 @@ class SinusoidalPositionEmbeddings(nn.Module):
         return embeddings
 
 class Unet(nn.Module):
-    def __init__(self, first_hidden:int = 16, depth:int = 3, time_embed_dim:int=8):
+    def __init__(self, first_hidden:int = 16, depth:int = 3, time_embed_dim:int=8, label_emb_dim:int=0, num_label:int=0, initial_channels:int=3):
         super().__init__()
         self.time_emb = SinusoidalPositionEmbeddings(time_embed_dim)
+        self.label_emb = nn.Linear(num_label, label_emb_dim) if num_label > 0 else None
         d = depth - 1
         self.down_blocks = nn.ModuleList()
         self.up_blocks = nn.ModuleList()
         
-        self.down_blocks.append(DownBlock(3 + time_embed_dim, first_hidden))
+        self.down_blocks.append(DownBlock(initial_channels + time_embed_dim + label_emb_dim, first_hidden))
         for i in range(d):
             self.down_blocks.append(DownBlock(first_hidden * 2**i, first_hidden * 2**(i+1)))
         
@@ -101,34 +107,42 @@ class Unet(nn.Module):
         for i in range(d, 0, -1):
             self.up_blocks.append(UpBlock(first_hidden * 2**i))
             
-        self.final = FinalBlock(first_hidden, 3)
+        self.final = FinalBlock(first_hidden, output_channels=initial_channels)
         
 
-    def forward(self, x, time):
+    def forward(self, x, time, label=None, verbose:int=0):
         time_embeddings = self.time_emb(time)
         time_embeddings = time_embeddings.unsqueeze(2).unsqueeze(3)
         time_embeddings = time_embeddings.expand(x.size(0), time_embeddings.size(1), x.size(2), x.size(3))
-    
-        print(f'start with shape {x.shape}')
+
+        if verbose==1: print(f'start with shape {x.shape}')
         
-        x = torch.cat([x, time_embeddings], dim=1)
-        print(f'after concatenating the timestep embedds : {x.shape}')
+        if self.label_emb:
+            label_embeddings = self.label_emb(label)
+            label_embeddings = label_embeddings.unsqueeze(2).unsqueeze(3)
+            time_embeddings = time_embeddings.expand(x.size(0), time_embeddings.size(1), x.size(2), x.size(3))
+            
+            x = torch.cat([x, time_embeddings, label_embeddings], dim=1)
+        else:
+            x = torch.cat([x, time_embeddings], dim=1)
+        if verbose==1: print(f'after concatenating the timestep embedds : {x.shape}')
         
         skips = []
         for i, block in enumerate(self.down_blocks):
-            print(f'down block {i}, with shape {x.shape}')
+            if verbose==1: print(f'down block {i}, with shape {x.shape}')
             x, xi = block(x)
             skips.append(xi)
         
         x = self.bottleneck(x)
-        print(f'after bottleneck : shape = {x.shape}')
+        if verbose==1: print(f'after bottleneck : shape = {x.shape}')
         
         for i, block in enumerate(self.up_blocks):
-            print(f'up block {i}, with shape {x.shape}')
-            x = block(x, skips.pop())
+            skip = skips.pop()
+            if verbose==1: print(f'up block {i}, with shape {x.shape}, and skip shape : {skip.shape}')
+            x = block(x, skip)
         
         x = self.final(x, skips[0])
-        print(f'after final : shape = {x.shape}')
+        if verbose==1: print(f'after final : shape = {x.shape}')
         
         return x
 
