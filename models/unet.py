@@ -90,24 +90,24 @@ class SinusoidalPositionEmbeddings(nn.Module):
         return embeddings
 
 class Unet(nn.Module):
-    def __init__(self, first_hidden:int = 16, depth:int = 3, time_embed_dim:int=8, label_emb_dim:int=0, num_label:int=0, initial_channels:int=3):
+    def __init__(self, first_hidden:int = 16, depth:int = 3, time_embed_dim:int=8, label_emb_dim:int=0, num_label:int=0, initial_channels:int=3, conv_layers:int=2):
         super().__init__()
         self.time_emb = SinusoidalPositionEmbeddings(time_embed_dim)
-        self.label_emb = nn.Linear(num_label, label_emb_dim) if num_label > 0 else None
+        self.label_emb = nn.Embedding(num_label, label_emb_dim) if num_label > 0 else None
         d = depth - 1
         self.down_blocks = nn.ModuleList()
         self.up_blocks = nn.ModuleList()
         
-        self.down_blocks.append(DownBlock(initial_channels + time_embed_dim + label_emb_dim, first_hidden))
+        self.down_blocks.append(DownBlock(initial_channels + time_embed_dim + label_emb_dim, first_hidden, conv_layers=conv_layers))
         for i in range(d):
-            self.down_blocks.append(DownBlock(first_hidden * 2**i, first_hidden * 2**(i+1)))
+            self.down_blocks.append(DownBlock(first_hidden * 2**i, first_hidden * 2**(i+1), conv_layers=conv_layers))
         
-        self.bottleneck = BottleNeck(first_hidden*2**d, first_hidden*2**(d+1))
+        self.bottleneck = BottleNeck(first_hidden*2**d, first_hidden*2**(d+1), conv_layers=conv_layers)
         
         for i in range(d, 0, -1):
-            self.up_blocks.append(UpBlock(first_hidden * 2**i))
+            self.up_blocks.append(UpBlock(first_hidden * 2**i, conv_layers=conv_layers))
             
-        self.final = FinalBlock(first_hidden, output_channels=initial_channels)
+        self.final = FinalBlock(first_hidden, output_channels=initial_channels, conv_layers=conv_layers)
         
 
     def forward(self, x, time, label=None, verbose:int=0):
@@ -118,9 +118,13 @@ class Unet(nn.Module):
         if verbose==1: print(f'start with shape {x.shape}')
         
         if self.label_emb:
+            if verbose==1: print(f'label shape : {label.shape}')
             label_embeddings = self.label_emb(label)
-            label_embeddings = label_embeddings.unsqueeze(2).unsqueeze(3)
-            time_embeddings = time_embeddings.expand(x.size(0), time_embeddings.size(1), x.size(2), x.size(3))
+            if verbose==1: print(f'label_embeddings shape : {label_embeddings.shape}')
+            label_embeddings = label_embeddings.unsqueeze(2).unsqueeze(2)
+            if verbose==1: print(f'label_embeddings shape : {label_embeddings.shape}')
+            label_embeddings = label_embeddings.expand(x.size(0), label_embeddings.size(1), x.size(2), x.size(3))
+            if verbose==1: print(f'label_embeddings shape : {label_embeddings.shape}')
             
             x = torch.cat([x, time_embeddings, label_embeddings], dim=1)
         else:
