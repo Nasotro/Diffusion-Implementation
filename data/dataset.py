@@ -55,11 +55,8 @@ class MNIST_Dataset():
         
 
     def load_set(self):
-        transform = transforms.Compose(
-            [transforms.ToTensor(),
-            transforms.Normalize((0.5,), (0.5,))])
         self.set = torchvision.datasets.MNIST(root='./data', train = (self.split=='train'),
-                                        download=True, transform=transform)
+                                        download=True, transform=self.transform)
      
     def show_image(self, idx):
         img = self[idx]
