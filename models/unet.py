@@ -10,7 +10,7 @@ class DownBlock(nn.Module):
         self.norms = nn.ModuleList([nn.BatchNorm2d(output_channels) for _ in range(conv_layers)])
         for _ in range(conv_layers - 1):
             self.convs.append(nn.Conv2d(output_channels, output_channels, kernel_size, padding=1))
-        self.max_pooling = nn.MaxPool2d(kernel_size=1, stride=2)
+        self.max_pooling = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
     def forward(self, x):
         for conv, norm in zip(self.convs, self.norms):
@@ -102,14 +102,13 @@ class Unet(nn.Module):
         for i in range(d):
             self.down_blocks.append(DownBlock(first_hidden * 2**i, first_hidden * 2**(i+1), conv_layers=conv_layers))
         
-        self.bottleneck = BottleNeck(first_hidden*2**d, first_hidden*2**(d+1), conv_layers=conv_layers)
+        self.bottleneck = BottleNeck(first_hidden*2**d, first_hidden*2**(d+1), conv_layers=3)
         
         for i in range(d, 0, -1):
             self.up_blocks.append(UpBlock(first_hidden * 2**i, conv_layers=conv_layers))
             
         self.final = FinalBlock(first_hidden, output_channels=initial_channels, conv_layers=conv_layers)
-        
-
+    
     def forward(self, x, time, label=None, verbose:int=0):
         time_embeddings = self.time_emb(time)
         time_embeddings = time_embeddings.unsqueeze(2).unsqueeze(3)

@@ -95,4 +95,18 @@ class CosineNoiseAdder():
     def get_beta_t(self, t:int):
         return 1 - self.get_alpha_t(t)
         
-        
+
+
+class NoiseDataset():
+    def __init__(self, imgs_dataset, noise_schedule = None):
+        self.imgs_dataset = imgs_dataset
+        self.noise_schedule = noise_schedule if noise_schedule else CosineNoiseAdder()       
+
+    def __getitem__(self, idx):
+        img, label = self.imgs_dataset[idx]
+        t = torch.randint(self.noise_schedule.T, (1, )).squeeze()
+        noisy_img, noise = self.noise_schedule.image_at_time_step(img, t)
+        return noisy_img, noise, t, label
+
+    def __len__(self):
+        return len(self.imgs_dataset)
