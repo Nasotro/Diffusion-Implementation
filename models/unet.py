@@ -4,7 +4,7 @@ import torch.nn as nn
 class DownBlock(nn.Module):
     def __init__(self, input_channels:int, output_channels:int, conv_layers:int=2, kernel_size:int=3, dropout:float=0.0):
         super().__init__()
-        self.relu = nn.ReLU()
+        self.silu = nn.SiLU()
         self.convs = nn.ModuleList()
         self.convs.append(nn.Conv2d(input_channels, output_channels, kernel_size, padding=1))
         self.norms = nn.ModuleList([nn.BatchNorm2d(output_channels) for _ in range(conv_layers)])
@@ -15,7 +15,7 @@ class DownBlock(nn.Module):
 
     def forward(self, x):
         for conv, norm, dropout in zip(self.convs, self.norms, self.dropouts):
-            x = dropout(self.relu(norm(conv(x))))
+            x = dropout(self.silu(norm(conv(x))))
         x_link = x.clone()
         x = self.max_pooling(x_link)
         return x, x_link
@@ -30,18 +30,18 @@ class BottleNeck(nn.Module):
         for _ in range(conv_layers - 1):
             self.convs.append(nn.Conv2d(hidden_channels, hidden_channels, kernel_size, padding=1))
         self.up_conv = nn.ConvTranspose2d(hidden_channels, hidden_channels // 2, kernel_size=2, stride=2)
-        self.relu = nn.ReLU()
+        self.silu = nn.SiLU()
 
     def forward(self, x):
         for conv, norm, dropout in zip(self.convs, self.norms, self.dropouts):
-            x = dropout(self.relu(norm(conv(x))))
-        x = self.relu(self.up_conv(x))
+            x = dropout(self.silu(norm(conv(x))))
+        x = self.silu(self.up_conv(x))
         return x
 
 class UpBlock(nn.Module):
     def __init__(self, input_channels:int, conv_layers:int=2, kernel_size:int=3, dropout:float=0.0):
         super().__init__()
-        self.relu = nn.ReLU()
+        self.silu = nn.SiLU()
         self.convs = nn.ModuleList()
         self.convs.append(nn.Conv2d(input_channels * 2, input_channels, kernel_size, padding=1))
         self.norms = nn.ModuleList([nn.BatchNorm2d(input_channels) for _ in range(conv_layers)])
@@ -53,15 +53,14 @@ class UpBlock(nn.Module):
     def forward(self, x:torch.Tensor, x_connection:torch.Tensor):
         x = torch.cat([x, x_connection], dim=1)
         for conv, norm, dropout in zip(self.convs, self.norms, self.dropouts):
-            x = dropout(self.relu(norm(conv(x))))
-        x = self.relu(self.up_conv(x))
+            x = dropout(self.silu(norm(conv(x))))
+        x = self.silu(self.up_conv(x))
         return x
 
 class FinalBlock(nn.Module):
     def __init__(self, input_channels, conv_layers:int=2, output_channels:int=3, dropout:float=0.0):
         super().__init__()
-        self.relu = nn.ReLU()
-        self.tanh = nn.Tanh()
+        self.silu = nn.SiLU()
         self.convs = nn.ModuleList()
         self.convs.append(nn.Conv2d(input_channels * 2, input_channels, kernel_size=3, padding=1))
         self.norms = nn.ModuleList([nn.BatchNorm2d(input_channels) for _ in range(conv_layers)])
@@ -74,9 +73,9 @@ class FinalBlock(nn.Module):
         x = torch.cat([x, x_connection], dim=1)
 
         for conv, norm, dropout in zip(self.convs, self.norms, self.dropouts):
-            x = dropout(self.relu(norm(conv(x))))
+            x = dropout(self.silu(norm(conv(x))))
 
-        x = self.tanh(self.final_conv(x))
+        x = self.final_conv(x)
         return x
 
 class SinusoidalPositionEmbeddings(nn.Module):
@@ -93,11 +92,39 @@ class SinusoidalPositionEmbeddings(nn.Module):
         embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
         return embeddings
 
+class TimeEmbedding(nn.Module):
+    def __init__(self, time_embed_dim, emb_dim):
+        super().__init__()
+        self.time_mlp = nn.Sequential(
+            SinusoidalPositionEmbeddings(time_embed_dim),
+            nn.Linear(time_embed_dim, emb_dim),
+            nn.SiLU(),
+            nn.Linear(emb_dim, emb_dim)
+        )
+    
+    def forward(self, t):
+        return self.time_mlp(t)
+
+class LabelEmbedding(nn.Module):
+    def __init__(self, num_classes, emb_dim):
+        super().__init__()
+        self.emb = nn.Embedding(num_classes, emb_dim)
+        self.proj = nn.Sequential(
+            nn.Linear(emb_dim, emb_dim),
+            nn.SiLU(),
+            nn.Linear(emb_dim, emb_dim)
+        )
+    
+    def forward(self, label):
+        emb = self.emb(label)
+        return self.proj(emb)
+
+
 class Unet(nn.Module):
     def __init__(self, first_hidden:int = 16, depth:int = 3, time_embed_dim:int=8, label_emb_dim:int=0, num_label:int=0, initial_channels:int=3, conv_layers:int=2, dropout:float=0.0):
         super().__init__()
-        self.time_emb = SinusoidalPositionEmbeddings(time_embed_dim)
-        self.label_emb = nn.Embedding(num_label, label_emb_dim) if num_label > 0 else None
+        self.time_emb = TimeEmbedding(time_embed_dim, time_embed_dim)
+        self.label_emb = LabelEmbedding(num_label, label_emb_dim) if num_label > 0 else None
         d = depth - 1
         self.down_blocks = nn.ModuleList()
         self.up_blocks = nn.ModuleList()
@@ -112,6 +139,7 @@ class Unet(nn.Module):
             self.up_blocks.append(UpBlock(first_hidden * 2**i, conv_layers=conv_layers, dropout=dropout))
 
         self.final = FinalBlock(first_hidden, output_channels=initial_channels, conv_layers=conv_layers, dropout=dropout)
+
 
     def forward(self, x, time, label=None, verbose:int=0):
         time_embeddings = self.time_emb(time)
