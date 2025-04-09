@@ -145,7 +145,7 @@ class Unet(nn.Module):
         time_embeddings = self.time_emb(time)
         time_embeddings = time_embeddings.unsqueeze(2).unsqueeze(3)
         time_embeddings = time_embeddings.expand(x.size(0), time_embeddings.size(1), x.size(2), x.size(3))
-
+        
         if verbose==1: print(f'start with shape {x.shape}')
 
         if self.label_emb:
