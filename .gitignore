@@ -6,3 +6,13 @@ venv/
 __pycache__/
 
 */__pycache__/
+
+
+
+/notebooks/data/*
+
+*.pth
+
+*.zip
+
+

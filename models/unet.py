@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+
 class DownBlock(nn.Module):
     def __init__(self, input_channels:int, output_channels:int, conv_layers:int=2, kernel_size:int=3, dropout:float=0.0):
         super().__init__()
@@ -121,15 +122,15 @@ class LabelEmbedding(nn.Module):
 
 
 class Unet(nn.Module):
-    def __init__(self, first_hidden:int = 16, depth:int = 3, time_embed_dim:int=8, label_emb_dim:int=0, num_label:int=0, initial_channels:int=3, conv_layers:int=2, dropout:float=0.0):
+    def __init__(self, first_hidden:int = 16, depth:int = 3, embed_dim:int=8, num_label:int=0, initial_channels:int=3, conv_layers:int=2, dropout:float=0.0):
         super().__init__()
-        self.time_emb = TimeEmbedding(time_embed_dim, time_embed_dim)
-        self.label_emb = LabelEmbedding(num_label, label_emb_dim) if num_label > 0 else None
+        self.time_emb = TimeEmbedding(embed_dim, embed_dim)
+        self.label_emb = LabelEmbedding(num_label, embed_dim) if num_label > 0 else None
         d = depth - 1
         self.down_blocks = nn.ModuleList()
         self.up_blocks = nn.ModuleList()
 
-        self.down_blocks.append(DownBlock(initial_channels + time_embed_dim + label_emb_dim, first_hidden, conv_layers=conv_layers, dropout=dropout))
+        self.down_blocks.append(DownBlock(initial_channels + embed_dim, first_hidden, conv_layers=conv_layers, dropout=dropout))
         for i in range(d):
             self.down_blocks.append(DownBlock(first_hidden * 2**i, first_hidden * 2**(i+1), conv_layers=conv_layers, dropout=dropout))
 
@@ -142,12 +143,13 @@ class Unet(nn.Module):
 
 
     def forward(self, x, time, label=None, verbose:int=0):
+        if verbose==1: print(f'start with shape {x.shape}')
+        
         time_embeddings = self.time_emb(time)
         time_embeddings = time_embeddings.unsqueeze(2).unsqueeze(3)
         time_embeddings = time_embeddings.expand(x.size(0), time_embeddings.size(1), x.size(2), x.size(3))
-        
-        if verbose==1: print(f'start with shape {x.shape}')
 
+        embeddings = time_embeddings
         if self.label_emb:
             if verbose==1: print(f'label shape : {label.shape}')
             label_embeddings = self.label_emb(label)
@@ -156,11 +158,11 @@ class Unet(nn.Module):
             if verbose==1: print(f'label_embeddings shape : {label_embeddings.shape}')
             label_embeddings = label_embeddings.expand(x.size(0), label_embeddings.size(1), x.size(2), x.size(3))
             if verbose==1: print(f'label_embeddings shape : {label_embeddings.shape}')
-
-            x = torch.cat([x, time_embeddings, label_embeddings], dim=1)
-        else:
-            x = torch.cat([x, time_embeddings], dim=1)
-        if verbose==1: print(f'after concatenating the timestep embedds : {x.shape}')
+            embeddings = embeddings + label_embeddings
+            
+        x = torch.cat([x, embeddings], dim=1)
+        
+        if verbose==1: print(f'after concatenating the timestep (& labels) embedds : {x.shape}')
 
         skips = []
         for i, block in enumerate(self.down_blocks):
@@ -170,6 +172,8 @@ class Unet(nn.Module):
 
         x = self.bottleneck(x)
         if verbose==1: print(f'after bottleneck : shape = {x.shape}')
+    
+
 
         for i, block in enumerate(self.up_blocks):
             skip = skips.pop()

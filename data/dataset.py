@@ -9,8 +9,8 @@ import numpy as np
 class Dataset():
     def __init__(self, name, split='train', transform=None):
         datasets = {
-            'CIFAR10': CIFAR10_Dataset,
-            'MNIST': MNIST_Dataset,
+            'CIFAR10': torchvision.datasets.CIFAR10,
+            'MNIST': torchvision.datasets.MNIST,
         }
         if name not in datasets:
             raise ValueError(f"Unknown dataset {name}. Known datasets are {datasets.keys()}")
@@ -27,17 +27,19 @@ class Dataset():
         self.classes = self.dataset.classes if hasattr(self.dataset, 'classes') else None
 
     def show_image(self, idx):
-        img = self[idx]
+        img, label = self[idx]
         img = img / 2 + 0.5     # unnormalize
         npimg = img.numpy()
         plt.imshow(np.transpose(npimg, (1, 2, 0)))
+        plt.title(f"Label: {self.classes[label] if self.classes else label}")
         plt.show()
     
     def __getitem__(self, idx:int) -> torch.Tensor:
-        raise NotImplementedError("__getitem__() not implemented in base class")
+        """Returns a tuple of (image, label)"""
+        return self.dataset[idx]
         
     def __len__(self) -> int:
-        raise NotImplementedError("__len__() not implemented in base class")
+        return len(self.dataset)
     
     def __str__(self) -> str:
         return f"Dataset of size {len(self)}"
@@ -56,7 +58,7 @@ class CIFAR10_Dataset():
         
 
     def load_set(self):
-        self.set = torchvision.datasets.ImageNet(root='./data', train = (self.split=='train'),
+        self.set = torchvision.datasets.CIFAR10(root='./data', train = (self.split=='train'),
                                         download=True, transform=self.transform)
         # self.set = torchvision.datasets.ImageNet(root='./data', split=self.split,
         #                                 download=True, transform=transform)
@@ -73,10 +75,10 @@ class CIFAR10_Dataset():
         Returns a Tensor of shape (3 x 32 x 32)
         """
         return self.set[idx]
-        
+
     def __len__(self) -> int:
         return len(self.set)
-    
+
     def __str__(self) -> str:
         return f"CIFAR dataset of size {len(self)}"
     def __repr__(self) -> str:
