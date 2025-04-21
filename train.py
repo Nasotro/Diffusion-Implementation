@@ -46,13 +46,13 @@ def eval_model(model:nn.Module, _test_loader, criterion, device):
     return sum(losses)/len(losses)
 
 
-def train_model(cfg:CFG, model, train, test, device=None):
+def train_model(cfg: CFG, model, train, test, device=None):
     if device is None:
         # Set the device to GPU if available, else CPU
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
     print(f"Using device: {device}")
-    
+
     model.apply(init_weights)  # Initialize model weights
 
     train_loader = DataLoader(train, shuffle=True, batch_size=cfg.batch_size)
@@ -62,16 +62,13 @@ def train_model(cfg:CFG, model, train, test, device=None):
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=cfg.n_epochs_lr * len(train_loader), eta_min=cfg.final_lr)
-    
-    
-    
+
     # keep track of the loss
     train_losses = []
     val_losses = []
     best_loss = np.inf
-    best_loss_i = 0
-    stoping = False
-    eval_every = int(len(train_loader) * cfg.eval_frequency) # evaluate every n% of the training set
+    best_epoch = 0
+    stopping = False
 
     # Compile the model for better performance
     if cfg.use_compile:
@@ -80,9 +77,11 @@ def train_model(cfg:CFG, model, train, test, device=None):
 
     # training loop
     for epoch in range(cfg.n_epochs):
-        if stoping: # if the early stopping is triggered, we stop the training
+        if stopping:  # if the early stopping is triggered, we stop the training
             break
         train_loader_tqdm = tqdm(train_loader, desc=f'Epoch {epoch+1}/{cfg.n_epochs}', leave=True)
+        epoch_train_loss = 0
+
         for i, batch in enumerate(train_loader_tqdm):
             noisy_imgs, noises, time_steps, labels = batch
             noisy_imgs, noises, time_steps, labels = noisy_imgs.to(device, dtype=cfg.images_precision), noises.to(device, dtype=cfg.images_precision), time_steps.to(device, dtype=torch.int16), labels.to(device, dtype=torch.int32)
@@ -95,44 +94,41 @@ def train_model(cfg:CFG, model, train, test, device=None):
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
 
+            epoch_train_loss += loss.item()
             train_losses.append(loss.item())
-            
-            # evaluate the model every eval_every steps
-            if i % eval_every == 0 and i > 0:
-                
-                val_loss = eval_model(model, test_loader, criterion, device)
-                val_losses.append(val_loss)
-                # print(f'Epoch [{epoch+1}/{n_epochs}], Step [{i}/{len(train_loader)}], Loss: {loss.item():.4f}, Val Loss: {val_loss:.4f}, lr: {scheduler.get_last_lr()[0]}')
 
-                if val_loss < best_loss:
-                    best_loss = val_loss
-                    best_loss_i = epoch * len(train_loader) + i
-                    torch.save(model.state_dict(), cfg.save_path)
+        # Calculate average training loss for the epoch
+        avg_train_loss = epoch_train_loss / len(train_loader)
 
-                train_loader_tqdm.set_postfix({'Loss': loss.item(), 'Val Loss': val_loss, 'best_loss' : best_loss, 'lr': scheduler.get_last_lr()[0]})
-                
-                if epoch * len(train_loader) + i - best_loss_i > cfg.patience:
-                    print("Stopping early")
-                    stoping = True
-                    break
-                
-            if epoch < cfg.n_epochs_lr:
-                scheduler.step()
-        
-        if stoping:
+        # Evaluate the model at the end of the epoch
+        val_loss = eval_model(model, test_loader, criterion, device)
+        val_losses.append(val_loss)
+
+        # Print training and validation loss
+        print(f'Epoch [{epoch+1}/{cfg.n_epochs}], Train Loss: {avg_train_loss:.4f}, Val Loss: {val_loss:.4f}, lr: {scheduler.get_last_lr()[0]}')
+
+        if val_loss < best_loss:
+            best_loss = val_loss
+            best_epoch = epoch
+            torch.save(model.state_dict(), cfg.save_path)
+
+        # Early stopping
+        if epoch - best_epoch > cfg.patience:
+            print("Stopping early")
+            stopping = True
             break
 
+        if epoch < cfg.n_epochs_lr:
+            scheduler.step()
 
-    # plot the losses
+    # Plot the losses
     plt.figure(figsize=(10, 5))
-    train_losses_resized = [np.mean(train_losses[i * eval_every:(i + 1) * eval_every]) for i in range(len(val_losses))]
-    plt.plot(np.arange(0, len(train_losses_resized)) * eval_every / len(train_loader), train_losses_resized, label='Training Loss (averaged)')
-    plt.plot(np.arange(0, len(val_losses)) * eval_every / len(train_loader), val_losses, label='Validation Loss')
+    plt.plot(range(1, len(train_losses) + 1), train_losses, label='Training Loss')
+    plt.plot(range(1, len(val_losses) + 1), val_losses, label='Validation Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.legend()
     plt.show()
-
 
 
 if __name__ == "__main__":

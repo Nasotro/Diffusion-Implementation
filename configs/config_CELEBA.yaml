@@ -15,5 +15,5 @@ n_epochs: 30
 n_epochs_lr: 25
 num_labels: 0
 patience: 10000
-save_path: best_model_CELEBA.pth
+save_path: best_model2_CELEBA.pth
 use_compile: true
