@@ -79,6 +79,8 @@ class FinalBlock(nn.Module):
         x = self.final_conv(x)
         return x
 
+
+
 class SinusoidalPositionEmbeddings(nn.Module):
     def __init__(self, dim):
         super().__init__()
@@ -184,3 +186,19 @@ class Unet(nn.Module):
         if verbose==1: print(f'after final : shape = {x.shape}')
 
         return x
+    
+    
+
+
+def init_weights(m):
+    if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
+        nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='leaky_relu')
+        if m.bias is not None:
+            nn.init.zeros_(m.bias)
+    elif isinstance(m, nn.Linear):
+        nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='leaky_relu')
+        if m.bias is not None:
+            nn.init.zeros_(m.bias)
+    elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+        nn.init.ones_(m.weight)
+        nn.init.zeros_(m.bias)

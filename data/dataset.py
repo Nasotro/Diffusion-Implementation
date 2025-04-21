@@ -11,6 +11,7 @@ class Dataset():
         datasets = {
             'CIFAR10': torchvision.datasets.CIFAR10,
             'MNIST': torchvision.datasets.MNIST,
+            'CELEBA': torchvision.datasets.CelebA,
         }
         if name not in datasets:
             raise ValueError(f"Unknown dataset {name}. Known datasets are {datasets.keys()}")
@@ -22,7 +23,11 @@ class Dataset():
         self.split = split
         self.name = name
         self.transform = transform
-        self.dataset = datasets[name](root='./data', train = (self.split=='train'), 
+        if name in ['CIFAR10', 'MNIST']:
+            self.dataset = datasets[name](root='./data', train = (self.split=='train'), 
+                                      download=True, transform=self.transform)
+        elif name == 'CELEBA':
+            self.dataset = datasets[name](root='./data', split=self.split, 
                                       download=True, transform=self.transform)
         self.classes = self.dataset.classes if hasattr(self.dataset, 'classes') else None
 
