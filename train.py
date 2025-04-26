@@ -1,3 +1,4 @@
+from datetime import datetime
 import torch
 import torchvision.transforms as transforms
 import torch.nn as nn
@@ -105,7 +106,7 @@ def train_model(cfg: CFG, model, train, test, device=None):
         val_losses.append(val_loss)
 
         # Print training and validation loss
-        print(f'Epoch [{epoch+1}/{cfg.n_epochs}], Train Loss: {avg_train_loss:.4f}, Val Loss: {val_loss:.4f}, lr: {scheduler.get_last_lr()[0]}')
+        print(f'[{datetime.now().strftime(r'%d/%m, %H:%M:%S')}] - Epoch [{epoch+1}/{cfg.n_epochs}], Train Loss: {avg_train_loss:.4f}, Val Loss: {val_loss:.4f}, lr: {scheduler.get_last_lr()[0]}')
 
         if val_loss < best_loss:
             best_loss = val_loss
@@ -121,10 +122,14 @@ def train_model(cfg: CFG, model, train, test, device=None):
         if epoch < cfg.n_epochs_lr:
             scheduler.step()
 
-    # Plot the losses
+    # Plot the losses by averaging the train loss for each epoch
     plt.figure(figsize=(10, 5))
-    plt.plot(range(1, len(train_losses) + 1), train_losses, label='Training Loss')
-    plt.plot(range(1, len(val_losses) + 1), val_losses, label='Validation Loss')
+    n = len(val_losses)
+    b = int(len(train_losses)/n)
+    average_train_losses =  np.array(train_losses)
+    average_train_losses = [average_train_losses[i:i+b].mean() for i in range(n)]
+    plt.plot(range(1, n + 1), average_train_losses, label='Training Loss')
+    plt.plot(range(1, n + 1), val_losses, label='Validation Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.legend()
