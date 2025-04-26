@@ -9,11 +9,11 @@ final_lr: 1.0e-05
 first_hidden: 64
 image_size: 64
 initial_channels: 3
-lr: 0.001
+lr: 1.0e-3
 max_time_steps: 400
-n_epochs: 500
-n_epochs_lr: 200
+n_epochs: 100
+n_epochs_lr: 90
 num_labels: 0
-patience: 25
+patience: 20
 save_path: best_model2_CELEBA.pth
 use_compile: true
