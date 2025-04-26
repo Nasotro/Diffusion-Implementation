@@ -35,7 +35,7 @@ def sample(model, n_samples=1, config=None, device=None):
             full_img = torch.tensor([], device=device)
             full_predicted_noise = torch.tensor([], device=device)
         
-            xt = torch.randn((1, config.initial_channels, 32, 32)).to(device)
+            xt = torch.randn((1, config.initial_channels, config.image_size, config.image_size)).to(device)
             for t in torch.arange(max_time_steps-1, -1, -1):
                 t = t.expand((1)).to(device)
                 a_t = CosineNoise.get_alpha_t(t)
@@ -90,7 +90,7 @@ if __name__ == "__main__":
     model.to(device)
     
     
-    n_samples = 5
+    n_samples = 10
     
     imgs, full_imgs = sample(model, n_samples, config_CELEBA, device=device)
     for i, (xt, full_img) in enumerate(zip(imgs, full_imgs)):
