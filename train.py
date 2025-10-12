@@ -55,8 +55,8 @@ def train_model(cfg: CFG, model, train, test, device=None):
 
     model.apply(init_weights)  # Initialize model weights
 
-    train_loader = DataLoader(train, shuffle=True, batch_size=cfg.batch_size)
-    test_loader = DataLoader(test, shuffle=False, batch_size=cfg.batch_size)
+    train_loader = DataLoader(train, shuffle=True, batch_size=cfg.batch_size, num_workers=cfg.num_workers, pin_memory=True)
+    test_loader = DataLoader(test, shuffle=False, batch_size=cfg.batch_size, num_workers=cfg.num_workers, pin_memory=True)
 
     criterion = nn.MSELoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.lr)
