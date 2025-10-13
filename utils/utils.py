@@ -10,14 +10,13 @@ from dataclasses import dataclass
 def show_image(img:torch.Tensor, title:str=None, unnormalize:bool=True, transpose:bool=True) -> None:
     if not isinstance(img, np.ndarray):
         npimg = img.cpu().detach().numpy()
-    else : 
+    else: 
         npimg = img
         
     if unnormalize:
         npimg = npimg / 2 + 0.5     # unnormalize
     if transpose:
         npimg = np.transpose(npimg, (1, 2, 0))
-        
     plt.imshow(npimg, cmap='gray')
     if title is not None:
         plt.title(title)
