@@ -29,17 +29,17 @@ def train_vae(model, train_loader,optimizer, epochs=20):
             epoch_loss += loss.item()
             progress_bar.set_postfix(loss=loss.item(), recon_loss=recon_loss.item(), kl_loss=kl_loss.item())
             
-            # latent_mean = torch.mean(z, dim=[0, 2, 3]).item()  # Should be ~0
-            # latent_std = torch.std(z, dim=[0, 2, 3]).mean().item()  # Should be ~1
-            # latent_l2 = torch.norm(z, p=2, dim=1).mean().item()  # Should be ~√(latent_dim)
+            latent_mean = torch.mean(z, dim=[0, 2, 3]).mean().item()  # Should be ~0
+            latent_std = torch.std(z, dim=[0, 2, 3]).mean().item()  # Should be ~1
+            latent_l2 = torch.norm(z, p=2, dim=1).mean().item()  # Should be ~√(latent_dim)
             wandb.log({
                 "batch/total_loss": loss.item(),
                 "batch/recon_loss": recon_loss.item(),
                 "batch/kl_loss": kl_loss.item(),
                 "batch/lr": scheduler.get_last_lr()[0],
-                # "latent_space/mean":latent_mean,
-                # "latent_space/std":latent_std,
-                # "latent_space/norm_l2":latent_l2,
+                "latent_space/mean":latent_mean,
+                "latent_space/std":latent_std,
+                "latent_space/norm_l2":latent_l2,
             })
 
             losses['total'].append(loss.item())
@@ -81,8 +81,8 @@ if __name__ == '__main__':
         "num_epochs": 300,
         "learning_rate": 1e-3,
         "n_epochs_kl_annealing": 30,
-        "depth": 3,
-        "beta": 2.0
+        "depth": 3, # latent img size : 8 x 8
+        "beta": 1.0
     }
 
     model_path = f"vae_{cfg['dataset']}.pth"
