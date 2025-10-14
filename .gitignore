@@ -17,3 +17,5 @@ data/*
 *.zip
 
 wandb/
+
+*.log

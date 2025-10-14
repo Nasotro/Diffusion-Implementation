@@ -90,7 +90,7 @@ if __name__ == "__main__":
     model.to(device)
     
     
-    n_samples = 10
+    n_samples = 3
     
     imgs, full_imgs = sample(model, n_samples, config_CELEBA, device=device)
     for i, (xt, full_img) in enumerate(zip(imgs, full_imgs)):
