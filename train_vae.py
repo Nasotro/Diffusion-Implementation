@@ -7,14 +7,14 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 from tqdm import tqdm
 import wandb
+import warnings
 
-
-def vae_loss(recon_x, x, mu, logvar, beta=1.0, epoch=0, max_anneal_epochs=10):
+def vae_loss(recon_x, x, mu, logvar, beta=1.0, epoch=-1, max_anneal_epochs=10):
     recon_loss = nn.functional.mse_loss(recon_x, x, reduction='mean')
     kl_loss = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
-    
-    if epoch < max_anneal_epochs:
-        beta = beta * epoch / max_anneal_epochs
+    if epoch != -1:
+        if epoch < max_anneal_epochs:
+            beta = beta * epoch / max_anneal_epochs
     total_loss = recon_loss + beta * kl_loss
     return total_loss, recon_loss, kl_loss
 
@@ -38,7 +38,7 @@ def evaluate(model, dataloader) -> tuple[float, float, float]:
 
 
 
-def train_vae(model, train_loader,optimizer, epochs=20):
+def train_vae(model, train_loader, optimizer, epochs, test_loader):
     best_val_loss = float('inf')
     for epoch in range(epochs):
         model.train()
@@ -83,6 +83,7 @@ def train_vae(model, train_loader,optimizer, epochs=20):
         })
         
         if cfg['eval_every'] > 0 and (epoch + 1) % cfg['eval_every'] == 0:
+            print('eval')
             val_loss, val_recon_loss, val_kl_loss = evaluate(model, test_loader)
             wandb.log({
                 "val/total_loss": val_loss,
@@ -110,20 +111,22 @@ def train_vae(model, train_loader,optimizer, epochs=20):
 
 
 if __name__ == '__main__':
+    warnings.filterwarnings("ignore")
+
     cfg = {
         "image_size": 64,
         "channels": 3,
         "latent_dim": 128,
         "dataset": "celeba",
         "batch_size": 32,
-        "num_epochs": 10,
+        "num_epochs": 60,
         "learning_rate": 1e-3,
         "n_epochs_kl_annealing": 5,
         "depth": 3,
         "beta": 2.0,
         "eval_every": 1,
         "T0_annealing": 10,
-        "T_mult_annealing": 1.5,
+        "T_mult_annealing": 2,
         "eta_min_lr": 1e-5
     }
 
@@ -154,13 +157,14 @@ if __name__ == '__main__':
 
     # train = CIFAR10_Dataset(split='train', transform=transform)
     # train = MNIST_Dataset(split='train', transform=transform)
-    train_loader = Dataset('CELEBA', split='train', transform=transform)
-    test_loader = Dataset('CELEBA', split='test', transform=transform)
+    train = Dataset('CELEBA', split='train', transform=transform)
+    test = Dataset('CELEBA', split='test', transform=transform)
     
-    dataloader = DataLoader(train_loader, batch_size=cfg['batch_size'], shuffle=True, num_workers=2)
+    train_loader = DataLoader(train, batch_size=cfg['batch_size'], shuffle=True, num_workers=2)
+    test_loader = DataLoader(test, batch_size=cfg['batch_size'], shuffle=True, num_workers=2)
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg['learning_rate'])
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=cfg['T0_annealing'], T_mult=cfg['T_mult_annealing'], eta_min=cfg['eta_min_lr'])
 
-    model_best = train_vae(model, dataloader, optimizer, epochs=cfg['num_epochs'])
+    model_best = train_vae(model, train_loader, optimizer, epochs=cfg['num_epochs'], test_loader=test_loader)
     
     run.finish()
