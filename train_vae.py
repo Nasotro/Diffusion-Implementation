@@ -119,14 +119,16 @@ if __name__ == '__main__':
         "latent_dim": 128,
         "dataset": "celeba",
         "batch_size": 32,
-        "num_epochs": 60,
+        "num_epochs": 100,
         "learning_rate": 1e-3,
-        "n_epochs_kl_annealing": 5,
+        "min_lr": 1e-5,
+        "n_epochs_kl_annealing": 10,
         "depth": 3,
         "beta": 2.0,
         "eval_every": 1,
         "T0_annealing": 10,
-        "T_mult_annealing": 2,
+        "T_mult_annealing": 1,
+        "fixed_lr_epochs": 60,
         "eta_min_lr": 1e-5
     }
 
@@ -163,7 +165,18 @@ if __name__ == '__main__':
     train_loader = DataLoader(train, batch_size=cfg['batch_size'], shuffle=True, num_workers=2)
     test_loader = DataLoader(test, batch_size=cfg['batch_size'], shuffle=True, num_workers=2)
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg['learning_rate'])
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=cfg['T0_annealing'], T_mult=cfg['T_mult_annealing'], eta_min=cfg['eta_min_lr'])
+    scheduler = torch.optim.lr_scheduler.SequentialLR(
+        optimizer,
+        schedulers=[
+            torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+                optimizer, T_0=cfg['T0_annealing'], T_mult=cfg['T_mult_annealing'], eta_min=cfg['eta_min_lr']
+            ),
+            torch.optim.lr_scheduler.ConstantLR(
+                optimizer, factor=1.0, total_iters=cfg['num_epochs'] - cfg['fixed_lr_epochs']
+            )
+        ],
+        milestones=[cfg['fixed_lr_epochs']]
+    )
 
     model_best = train_vae(model, train_loader, optimizer, epochs=cfg['num_epochs'], test_loader=test_loader)
     
