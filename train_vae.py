@@ -38,7 +38,7 @@ def evaluate(model, dataloader) -> tuple[float, float, float]:
 
 
 
-def train_vae(model, train_loader, optimizer, epochs, test_loader):
+def train_vae(model, train_loader, optimizer, epochs, test_loader) -> dict:
     best_val_loss = float('inf')
     for epoch in range(epochs):
         model.train()
@@ -109,6 +109,13 @@ def train_vae(model, train_loader, optimizer, epochs, test_loader):
         
     return model_best
 
+def sample_latent(model, num_samples:int=16):
+    model.eval()
+    with torch.no_grad():
+        z = torch.randn(num_samples, model.latent_dim, 1, 1).to(device)
+        samples = model.decode(z)
+    return samples
+
 
 if __name__ == '__main__':
     warnings.filterwarnings("ignore")
@@ -172,12 +179,17 @@ if __name__ == '__main__':
                 optimizer, T_0=cfg['T0_annealing'], T_mult=cfg['T_mult_annealing'], eta_min=cfg['eta_min_lr']
             ),
             torch.optim.lr_scheduler.ConstantLR(
-                optimizer, factor=1.0, total_iters=cfg['num_epochs'] - cfg['fixed_lr_epochs']
+                optimizer, factor=cfg["min_lr"] / cfg["learning_rate"], total_iters=cfg['num_epochs'] - cfg['fixed_lr_epochs']
             )
         ],
         milestones=[cfg['fixed_lr_epochs']]
     )
 
     model_best = train_vae(model, train_loader, optimizer, epochs=cfg['num_epochs'], test_loader=test_loader)
+    
+    # generate some images
+    model.load_state_dict(model_best)
+    samples = sample_latent(model, num_samples=16)
+    wandb.log({"output/generated_samples": [wandb.Image(img.cpu()) for img in samples]})
     
     run.finish()

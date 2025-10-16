@@ -91,6 +91,7 @@ class VAEDecoder(nn.Module):
     def __init__(self, depth:int = 2, latent_dim:int=256, initial_channels:int=3, conv_layers:int=2, dropout:float=0.0):
         super().__init__()
         self.depth = depth
+        self.bottleneck = VAEBottleneck(latent_dim, latent_dim, conv_layers=conv_layers, dropout=dropout)
         
         self.up_blocks = nn.ModuleList()
         for i in range(depth):
@@ -100,6 +101,8 @@ class VAEDecoder(nn.Module):
         
     def forward(self, z:torch.Tensor, verbose:int=0):
         if verbose==1: print(f"Decoder input shape: {z.shape}")
+        z = self.bottleneck(z)
+        if verbose==1: print(f"After Decoder bottleneck: {z.shape}")
         for i, up in enumerate(self.up_blocks):
             if verbose==1: print(f"Decoder up block {i}, input shape: {z.shape}")
             z = up(z, verbose=verbose)
