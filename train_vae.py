@@ -133,10 +133,9 @@ if __name__ == '__main__':
         "depth": 3,
         "beta": 2.0,
         "eval_every": 1,
-        "T0_annealing": 10,
+        "T0_annealing": 15,
         "T_mult_annealing": 1,
-        "fixed_lr_epochs": 60,
-        "eta_min_lr": 1e-5
+        "fixed_lr_epochs": 60
     }
 
     model_path = f"vae_{cfg['dataset']}.pth"
@@ -176,7 +175,7 @@ if __name__ == '__main__':
         optimizer,
         schedulers=[
             torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-                optimizer, T_0=cfg['T0_annealing'], T_mult=cfg['T_mult_annealing'], eta_min=cfg['eta_min_lr']
+                optimizer, T_0=cfg['T0_annealing'], T_mult=cfg['T_mult_annealing'], eta_min=cfg['min_lr']
             ),
             torch.optim.lr_scheduler.ConstantLR(
                 optimizer, factor=cfg["min_lr"] / cfg["learning_rate"], total_iters=cfg['num_epochs'] - cfg['fixed_lr_epochs']
