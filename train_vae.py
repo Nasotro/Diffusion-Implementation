@@ -124,16 +124,16 @@ if __name__ == '__main__':
         "latent_dim": 128,
         "dataset": "celeba",
         "batch_size": 32,
-        "num_epochs": 100,
+        "num_epochs": 120,
         "learning_rate": 1e-3,
         "min_lr": 1e-5,
-        "n_epochs_kl_annealing": 10,
+        "n_epochs_kl_annealing": 15,
         "depth": 3,
         "beta": 2.0,
         "eval_every": 1,
-        "T0_annealing": 15,
+        "T0_annealing": 20,
         "T_mult_annealing": 1,
-        "fixed_lr_epochs": 60,
+        "fixed_lr_epochs": 80,
         'data_augmentation': True
     }
 
@@ -158,7 +158,7 @@ if __name__ == '__main__':
     img_size = cfg['image_size']
     if cfg['data_augmentation']:
         transform = transforms.Compose([
-            transforms.Resize((img_size, img_size)),
+            # transforms.Resize((img_size, img_size)),
             transforms.RandomHorizontalFlip(),
             transforms.RandomRotation(10),
             transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
