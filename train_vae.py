@@ -36,8 +36,6 @@ def evaluate(model, dataloader) -> tuple[float, float, float]:
     avg_kl_loss = kl_loss_total / len(dataloader.dataset)
     return avg_loss, avg_recon_loss, avg_kl_loss
 
-
-
 def train_vae(model, train_loader, optimizer, epochs, test_loader) -> dict:
     best_val_loss = float('inf')
     for epoch in range(epochs):
@@ -112,7 +110,7 @@ def train_vae(model, train_loader, optimizer, epochs, test_loader) -> dict:
 def sample_latent(model, num_samples:int=16):
     model.eval()
     with torch.no_grad():
-        z = torch.randn(num_samples, model.latent_dim, 1, 1).to(device)
+        z = torch.randn(num_samples, model.latent_dim, 8, 8).to(device)
         samples = model.decode(z)
     return samples
 
@@ -135,7 +133,8 @@ if __name__ == '__main__':
         "eval_every": 1,
         "T0_annealing": 15,
         "T_mult_annealing": 1,
-        "fixed_lr_epochs": 60
+        "fixed_lr_epochs": 60,
+        'data_augmentation': True
     }
 
     model_path = f"vae_{cfg['dataset']}.pth"
@@ -157,11 +156,22 @@ if __name__ == '__main__':
     print(f'using device : {device}')
 
     img_size = cfg['image_size']
-    transform = transforms.Compose([
-        transforms.Resize((img_size, img_size)),
-        transforms.ToTensor(),
-        # transforms.Normalize((0.5,), (0.5,))
-    ])
+    if cfg['data_augmentation']:
+        transform = transforms.Compose([
+            transforms.Resize((img_size, img_size)),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomRotation(10),
+            transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+            transforms.RandomResizedCrop(img_size, scale=(0.8, 1.0)),
+            transforms.ToTensor(),
+            # transforms.Normalize((0.5,), (0.5,))
+        ])
+    else:
+        transform = transforms.Compose([
+            transforms.Resize((img_size, img_size)),
+            transforms.ToTensor(),
+            # transforms.Normalize((0.5,), (0.5,))
+        ])
 
     # train = CIFAR10_Dataset(split='train', transform=transform)
     # train = MNIST_Dataset(split='train', transform=transform)
