@@ -124,11 +124,12 @@ if __name__ == '__main__':
         "latent_dim": 128,
         "dataset": "celeba",
         "batch_size": 32,
-        "num_epochs": 120,
+        "num_epochs": 300,
         "learning_rate": 1e-3,
         "min_lr": 1e-5,
         "n_epochs_kl_annealing": 15,
         "depth": 3,
+        "conv_layers":3,
         "beta": 2.0,
         "eval_every": 1,
         "T0_annealing": 20,
@@ -148,8 +149,9 @@ if __name__ == '__main__':
     latent_dim = cfg['latent_dim']
     c = cfg['channels']
     depth = cfg['depth']
+    conv_layers = cfg['conv_layers']
 
-    model = VAE(latent_dim=latent_dim, initial_channels=c, depth=depth)
+    model = VAE(latent_dim=latent_dim, initial_channels=c, depth=depth, conv_layers=conv_layers)
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model = model.to(device)

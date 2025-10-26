@@ -113,12 +113,12 @@ class VAEDecoder(nn.Module):
         return z
 
 class VAE(nn.Module):
-    def __init__(self, latent_dim:int = 256, initial_channels:int=3, depth:int=2):
+    def __init__(self, latent_dim:int = 256, initial_channels:int=3, depth:int=2, conv_layers=2):
         super().__init__()
         self.latent_dim = latent_dim
 
-        self.encoder = VAEEncoder(depth=depth, latent_dim=latent_dim, first_hidden=16, initial_channels=initial_channels, conv_layers=2, dropout=0.0)
-        self.decoder = VAEDecoder(depth=depth, latent_dim=latent_dim, initial_channels=initial_channels, conv_layers=2, dropout=0.0)
+        self.encoder = VAEEncoder(depth=depth, latent_dim=latent_dim, first_hidden=16, initial_channels=initial_channels, conv_layers=conv_layers, dropout=0.2)
+        self.decoder = VAEDecoder(depth=depth, latent_dim=latent_dim, initial_channels=initial_channels, conv_layers=conv_layers, dropout=0.2)
 
     def encode(self, x:torch.Tensor, verbose:int=0):
         mu, logvar = self.encoder(x, verbose=verbose)
